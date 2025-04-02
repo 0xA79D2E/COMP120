@@ -4,15 +4,24 @@
 #define LED_2 A4
 #define PIEZO A5
 
-const int MIN_RANDOM_NUMBER = 1000;
-const int MAX_RANDOM_NUMBER = 2000;
-const int GAME_OVER_DELAY = 1000;
-const int MAX_PATTERN_LENGTH = 100;
-const int INPUT_TIMEOUT = 3000;
+#define GAME_OVER_DELAY 1000
 
-int pattern[MAX_PATTERN_LENGTH];
-int patternLength = 0;
-int level = 0;
+#define MAX_LENGTH 100
+
+#define TIMEOUT 3000
+
+
+
+void generatePattern(int pattern[], int length);
+void displayPattern(int pattern[], int length);
+bool getPlayerInput(int length);
+bool handlePlayerInput(int pattern[], int button, int led, int index);
+void gameOver();
+void playStartupTune();
+void playWinTune();
+void playFailureTone();
+void playGameOverTune();
+void playTune(int *notes, int *durations, int size);
 
 void setup() {
   pinMode(LED_1, OUTPUT);
@@ -27,23 +36,30 @@ void setup() {
 }
 
 void loop() {
+
+  static int pattern[MAX_LENGTH];
+  static int patternLength = 0;
+  static int level = 0;
+
   patternLength = 1;
   level = 1;
+
+
   while (true) {
     Serial.print("Level ");
     Serial.println(level);
-    generatePattern();
-    displayPattern();
-    if (!getPlayerInput()) {
+    generatePattern(pattern, patternLength);
+    displayPattern(pattern, patternLength);
+    if (!getPlayerInput(pattern, patternLength)) {
       gameOver();
       return;
     }
     playWinTune();
     Serial.print("Correct! Pattern length: ");
     Serial.println(patternLength);
-    patternLength++;
-    level++;
-    if (patternLength > MAX_PATTERN_LENGTH) {
+    ++patternLength;
+    ++level;
+    if (patternLength > MAX_LENGTH) {
       Serial.println("You win! You've completed the pattern!");
       playWinTune();
       delay(GAME_OVER_DELAY);
@@ -53,42 +69,42 @@ void loop() {
   }
 }
 
-void generatePattern() {
-  pattern[patternLength - 1] = random(1, 3);
-  Serial.println(pattern[patternLength - 1]);
+void generatePattern(int pattern[], int length) {
+  pattern[length - 1] = random(1, 3);
+  // Serial.println(pattern[length - 1]);
 }
 
-void displayPattern() {
+void displayPattern(int pattern[], int length) {
   Serial.println("Watch the pattern!");
-  for (int i = 0; i < patternLength; i++) {
+  for (int i = 0; i < length; ++i) {
     digitalWrite(LED_1, pattern[i] == 1);
     digitalWrite(LED_2, pattern[i] == 2);
-    delay(random(MIN_RANDOM_NUMBER, MAX_RANDOM_NUMBER));
+    delay(1000);
     digitalWrite(LED_1, LOW);
     digitalWrite(LED_2, LOW);
     delay(250);
   }
 }
 
-bool getPlayerInput() {
+bool getPlayerInput(int pattern[], int length) {
   int playerTurn = 0;
   unsigned long startTime = millis();
-  while (playerTurn < patternLength) {
-    if (millis() - startTime > INPUT_TIMEOUT) {
+  while (playerTurn < length) {
+    if (millis() - startTime > TIMEOUT) {
       Serial.println("Time's up!");
       return false;
     }
     if (digitalRead(BUTTON_1) == HIGH) {
-      if (!handlePlayerInput(1, LED_1, playerTurn++)) return false;
+      if (!handlePlayerInput(pattern, 1, LED_1, playerTurn++)) return false;
     }
     if (digitalRead(BUTTON_2) == HIGH) {
-      if (!handlePlayerInput(2, LED_2, playerTurn++)) return false;
+      if (!handlePlayerInput(pattern, 2, LED_2, playerTurn++)) return false;
     }
   }
   return true;
 }
 
-bool handlePlayerInput(int button, int led, int index) {
+bool handlePlayerInput(int pattern[], int button, int led, int index) {
   Serial.print("Button ");
   Serial.print(button);
   Serial.println(" pressed!");
@@ -105,7 +121,7 @@ bool handlePlayerInput(int button, int led, int index) {
 void gameOver() {
   playFailureTone();
   Serial.println("Game over.");
-  playGameOverTune();
+  //playGameOverTune();
   delay(GAME_OVER_DELAY);
 }
 
@@ -134,7 +150,7 @@ void playGameOverTune() {
 }
 
 void playTune(int *notes, int *durations, int size) {
-  for (int i = 0; i < size; i++) {
+  for (int i = 0; i < size; ++i) {
     tone(PIEZO, notes[i], durations[i]);
     delay(durations[i] + 50);
     noTone(PIEZO);
