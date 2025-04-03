@@ -5,71 +5,79 @@
 #define PIEZO A5
 
 #define GAME_OVER_DELAY 1000
-
 #define MAX_LENGTH 100
-
 #define TIMEOUT 3000
+#define LED_ON_TIME 1000
+#define LED_OFF_TIME 250
+#define DEBOUNCE_DELAY 50
 
 /**
- * @brief Generates a random pattern of given length.
- * 
+ * @brief Generates a random pattern for the game.
+ *
  * @param pattern Array to store the generated pattern.
  * @param length Length of the pattern to generate.
  */
-void generatePattern(int pattern[], int length);
+void generatePattern(int *pattern, int length);
 
 /**
  * @brief Displays the generated pattern using LEDs.
- * 
+ *
  * @param pattern Array containing the pattern to display.
  * @param length Length of the pattern to display.
  */
-void displayPattern(int pattern[], int length);
+void displayPattern(int* pattern, int length);
 
 /**
- * @brief Gets and validates the player's input against the pattern.
- * 
+ * @brief Processes the player's input sequence and validates it.
+ *
  * @param pattern Array containing the correct pattern.
  * @param length Length of the pattern to validate.
- * @return true if the input matches the pattern.
+ * @return true if the player's input matches the pattern.
  * @return false if the input does not match or times out.
  */
-bool getPlayerInput(int pattern[], int length);
+bool processPlayerSequence(int* pattern, int length);
 
 /**
- * @brief Handles individual button presses and validates against the pattern.
- * 
+ * @brief Validates if a player's button press matches the pattern.
+ *
  * @param pattern Array containing the correct pattern.
  * @param button The button number pressed.
- * @param led The corresponding LED to light up.
  * @param index The current index in the pattern.
  * @return true if the button press matches the pattern.
- * @return false if the button press does not match the pattern.
+ * @return false if the button press does not match.
  */
-bool handlePlayerInput(int pattern[], int button, int led, int index);
+bool validatePlayerInput(int* pattern, int button, int index);
+
+/**
+ * @brief Checks if a button is pressed, applying debouncing and LED feedback.
+ *
+ * @param buttonPin The pin of the button being checked.
+ * @param ledPin The LED pin to provide immediate feedback.
+ * @return true if the button press is confirmed.
+ * @return false otherwise.
+ */
+bool isButtonPressed(int buttonPin, int ledPin);
 
 /**
  * @brief Handles game over scenario.
  */
 void gameOver();
 
-
+/**
+ * @brief Various sound functions
+ */
 void playStartupTune();
-
 void playWinTune();
-
-void playFailureTone();
-
 void playGameOverTune();
 
 /**
  * @brief Plays a series of notes with specified durations.
- * 
+ *
  * @param notes Array of note frequencies.
  * @param durations Array of note durations.
  * @param size Number of notes in the arrays.
  */
-void playTune(int *notes, int *durations, int size);
+void playTune(int* notes, int* durations, int size);
 
 void setup() {
   pinMode(LED_1, OUTPUT);
@@ -77,128 +85,129 @@ void setup() {
   pinMode(PIEZO, OUTPUT);
   pinMode(BUTTON_1, INPUT);
   pinMode(BUTTON_2, INPUT);
-  randomSeed(analogRead(A0)); // Initialize the random seed with a noise value
+
+  randomSeed(analogRead(A0)); // Initialize random number generator with noise
+
   Serial.begin(9600);
   Serial.println("Welcome to Simon Says!");
-  playStartupTune(); // Play a tune at the start of the game
+  playStartupTune();
 }
 
 void loop() {
   static int pattern[MAX_LENGTH];
-  static int patternLength = 0;
-  static int level = 0;
+  static int patternLength = 1;  // Keep track of progress across loops
 
-  patternLength = 1; // Start with a single pattern length
-  level = 1; // Initial game level
+  Serial.print("Level ");
+  Serial.println(patternLength);
 
-  while (true) {
-    Serial.print("Level ");
-    Serial.println(level);
-    generatePattern(pattern, patternLength); // Generate a new pattern
-    displayPattern(pattern, patternLength); // Display the generated pattern
-    if (!getPlayerInput(pattern, patternLength)) { // Get and validate player's input
-      gameOver(); // End the game if input is incorrect
-      return;
-    }
-    playWinTune(); // Play a tune indicating success
-    Serial.print("Correct! Pattern length: ");
-    Serial.println(patternLength);
-    ++patternLength; // Increment pattern length for next round
-    ++level; // Increment game level
-    if (patternLength > MAX_LENGTH) { // Check if maximum length is reached
-      Serial.println("You win! You've completed the pattern!");
-      playWinTune(); // Play a tune indicating overall win
-      delay(GAME_OVER_DELAY);
-      return;
-    }
-    delay(1000); // Delay before starting the next round
+  generatePattern(pattern, patternLength);
+  displayPattern(pattern, patternLength);
+
+  if (!processPlayerSequence(pattern, patternLength)) {
+    gameOver();
+    patternLength = 1; // Reset game
+    return; // Break loop
   }
+
+  playWinTune();
+  Serial.println("Correct! Pattern length: " + String(patternLength));
+
+  patternLength++;
+
+  if (patternLength > MAX_LENGTH) {
+    Serial.println("Impossibly, you have completed the game. Congratulations.");
+    playWinTune();
+    delay(GAME_OVER_DELAY);
+    patternLength = 1;
+  }
+  delay(GAME_OVER_DELAY);
 }
 
-void generatePattern(int pattern[], int length) {
-  pattern[length - 1] = random(1, 3); // Generate a random pattern element (1 or 2)
-  // Serial.println(pattern[length - 1]);
+
+void generatePattern(int *pattern, int length) {
+  pattern[length - 1] = random(1, 3);
 }
 
-void displayPattern(int pattern[], int length) {
+void displayPattern(int *pattern, int length) {
   Serial.println("Watch the pattern!");
-  for (int i = 0; i < length; ++i) {
-    digitalWrite(LED_1, pattern[i] == 1); // Light up LED_1 if pattern element is 1
-    digitalWrite(LED_2, pattern[i] == 2); // Light up LED_2 if pattern element is 2
-    delay(1000); // Keep LED on for 1 second
-    digitalWrite(LED_1, LOW);
-    digitalWrite(LED_2, LOW);
-    delay(250); // Short delay before next element
+  for (int i = 0; i < length; i++) {
+    int ledPin = (pattern[i] == 1) ? LED_1 : LED_2;
+    digitalWrite(ledPin, HIGH);
+    delay(LED_ON_TIME);
+    digitalWrite(ledPin, LOW);
+    delay(LED_OFF_TIME);
   }
 }
 
-bool getPlayerInput(int pattern[], int length) {
+bool processPlayerSequence(int *pattern, int length) {
   int playerTurn = 0;
-  unsigned long startTime = millis(); // Record the start time for timeout handling
+  unsigned long startTime = millis();
+
   while (playerTurn < length) {
-    if (millis() - startTime > TIMEOUT) { // Check if player has timed out
+    if (millis() - startTime > TIMEOUT) {
       Serial.println("Time's up!");
       return false;
     }
-    if (digitalRead(BUTTON_1) == HIGH) {
-      if (!handlePlayerInput(pattern, 1, LED_1, playerTurn++)) return false; // Handle input for BUTTON_1
+    if (digitalRead(BUTTON_1) == HIGH && isButtonPressed(BUTTON_1, LED_1)) {
+      if (!validatePlayerInput(pattern, 1, playerTurn++)) return false;
+      startTime = millis();
     }
-    if (digitalRead(BUTTON_2) == HIGH) {
-      if (!handlePlayerInput(pattern, 2, LED_2, playerTurn++)) return false; // Handle input for BUTTON_2
+    if (digitalRead(BUTTON_2) == HIGH && isButtonPressed(BUTTON_2, LED_2)) {
+      if (!validatePlayerInput(pattern, 2, playerTurn++)) return false;
+      startTime = millis();
     }
   }
   return true;
 }
 
-bool handlePlayerInput(int pattern[], int button, int led, int index) {
-  Serial.print("Button ");
-  Serial.print(button);
-  Serial.println(" pressed!");
-  digitalWrite(led, HIGH); // Light up the corresponding LED
-  delay(200);
-  digitalWrite(led, LOW);
-  if (pattern[index] != button) { // Check if player input matches the pattern
+bool validatePlayerInput(int *pattern, int button, int index) {
+  if (pattern[index] != button) {
     Serial.println("Wrong input!");
     return false;
   }
   return true;
 }
 
+bool isButtonPressed(int buttonPin, int ledPin) {
+  digitalWrite(ledPin, HIGH);
+  delay(DEBOUNCE_DELAY);
+  if (digitalRead(buttonPin) == HIGH) {
+    while (digitalRead(buttonPin) == HIGH);
+    digitalWrite(ledPin, LOW);
+    return true;
+  }
+  digitalWrite(ledPin, LOW);
+  return false;
+}
+
 void gameOver() {
-  playFailureTone(); // Play a tone indicating failure
+  playGameOverTune();
   Serial.println("Game over.");
-  //playGameOverTune();
-  delay(GAME_OVER_DELAY); // Delay before game reset
+  delay(GAME_OVER_DELAY);
 }
 
 void playStartupTune() {
-  int notes[] = { 262, 330, 392, 523 };
-  int durations[] = { 200, 200, 200, 400 };
-  playTune(notes, durations, 4); // Play a sequence of notes
+  int notes[] = {262, 330, 392, 523};
+  int durations[] = {200, 200, 200, 400};
+  playTune(notes, durations, 4);
 }
 
 void playWinTune() {
-  int winNotes[] = { 523, 587, 659, 698 };
-  int durations[] = { 150, 150, 150, 300 };
-  playTune(winNotes, durations, 4); // Play a sequence of notes indicating success
-}
-
-void playFailureTone() {
-  tone(PIEZO, 300, 500); // Play a single failure tone
-  delay(500);
-  noTone(PIEZO);
+  int winNotes[] = {523, 587, 659, 698};
+  int durations[] = {150, 150, 150, 300};
+  playTune(winNotes, durations, 4);
 }
 
 void playGameOverTune() {
-  int notes[] = { 400, 300 };
-  int durations[] = { 300, 300 };
-  playTune(notes, durations, 2); // Play a sequence of notes indicating game over
+  int notes[] = {400, 300};
+  int durations[] = {300, 300};
+  playTune(notes, durations, 2);
 }
 
-void playTune(int *notes, int *durations, int size) {
+void playTune(int* notes, int* durations, int size) {
   for (int i = 0; i < size; ++i) {
-    tone(PIEZO, notes[i], durations[i]); // Play a single note
-    delay(durations[i] + 50); // Delay between notes
+    tone(PIEZO, notes[i], durations[i]);  // Play a single note
+    delay(durations[i] + 50);             // Delay between notes
     noTone(PIEZO);
   }
 }
