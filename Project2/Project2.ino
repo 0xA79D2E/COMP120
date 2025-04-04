@@ -170,10 +170,12 @@ bool processPlayerSequence(int* pattern, int length) {
       Serial.println("Time's up!");
       return false;
     }
+
     if (digitalRead(BUTTON_1) == HIGH && isButtonPressed(BUTTON_1, LED_1)) {
       if (!validatePlayerInput(pattern, 1, playerTurn++)) return false;
       startTime = millis();
     }
+
     if (digitalRead(BUTTON_2) == HIGH && isButtonPressed(BUTTON_2, LED_2)) {
       if (!validatePlayerInput(pattern, 2, playerTurn++)) return false;
       startTime = millis();
